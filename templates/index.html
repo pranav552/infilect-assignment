@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Infilect Product Detection</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+
+            font-family: Arial, sans-serif;
+
+            background:
+                linear-gradient(135deg,
+                    #eef2ff,
+                    #f8fafc);
+
+            margin: 0;
+
+            padding: 40px 20px;
+
+            color: #111827;
+        }
+
+
+        .container {
+
+            max-width: 1000px;
+
+            margin: auto;
+
+            background: white;
+
+            padding: 35px;
+
+            border-radius: 16px;
+
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+
+
+        h1 {
+
+            text-align: center;
+
+            margin-bottom: 10px;
+
+            color: #111827;
+        }
+
+
+        .subtitle {
+
+            text-align: center;
+
+            color: #6b7280;
+
+            margin-bottom: 30px;
+        }
+
+
+        .upload-box {
+
+            text-align: center;
+
+            padding: 30px;
+
+            border: 2px dashed #cbd5e1;
+
+            border-radius: 12px;
+
+            background: #f8fafc;
+        }
+
+
+        input[type="file"] {
+
+            margin: 20px 0;
+
+            padding: 10px;
+        }
+
+
+        button {
+
+            padding: 13px 28px;
+
+            border: none;
+
+            border-radius: 8px;
+
+            background: #2563eb;
+
+            color: white;
+
+            font-size: 16px;
+
+            font-weight: bold;
+
+            cursor: pointer;
+
+            transition: 0.2s;
+        }
+
+
+        button:hover {
+
+            background: #1d4ed8;
+        }
+
+
+        button:disabled {
+
+            background: #94a3b8;
+
+            cursor: not-allowed;
+        }
+
+
+        #loading {
+
+            display: none;
+
+            text-align: center;
+
+            margin-top: 20px;
+
+            color: #2563eb;
+
+            font-weight: bold;
+        }
+
+
+        #result {
+
+            margin-top: 30px;
+        }
+
+
+        .result-box {
+
+            background: #111827;
+
+            color: white;
+
+            padding: 25px;
+
+            border-radius: 12px;
+        }
+
+
+        .result-title {
+
+            margin-top: 0;
+
+            margin-bottom: 20px;
+        }
+
+
+        .stats {
+
+            display: flex;
+
+            gap: 20px;
+
+            margin-bottom: 25px;
+
+            flex-wrap: wrap;
+        }
+
+
+        .stat-card {
+
+            flex: 1;
+
+            min-width: 180px;
+
+            background: #1f2937;
+
+            padding: 20px;
+
+            border-radius: 10px;
+
+            text-align: center;
+        }
+
+
+        .stat-number {
+
+            font-size: 30px;
+
+            font-weight: bold;
+
+            color: #60a5fa;
+        }
+
+
+        .stat-label {
+
+            color: #d1d5db;
+
+            margin-top: 5px;
+        }
+
+
+        .annotated-image {
+
+            width: 100%;
+
+            max-height: 700px;
+
+            object-fit: contain;
+
+            background: #000;
+
+            border-radius: 10px;
+
+            margin-bottom: 25px;
+        }
+
+
+        .json-title {
+
+            margin-top: 25px;
+        }
+
+
+        pre {
+
+            background: #020617;
+
+            color: #d1d5db;
+
+            padding: 20px;
+
+            border-radius: 8px;
+
+            overflow-x: auto;
+
+            max-height: 500px;
+
+            font-size: 13px;
+
+            line-height: 1.5;
+        }
+
+
+        .error {
+
+            background: #fee2e2;
+
+            color: #991b1b;
+
+            padding: 15px;
+
+            border-radius: 8px;
+
+            margin-top: 20px;
+
+            font-weight: bold;
+        }
+
+
+        .success {
+
+            color: #22c55e;
+
+            font-weight: bold;
+
+            margin-bottom: 20px;
+        }
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <div class="container">
+
+
+        <h1>
+            Infilect Product Detection System
+        </h1>
+
+
+        <p class="subtitle">
+
+            AI-powered retail shelf product detection
+            and grouping
+
+        </p>
+
+
+        <!-- ================================================= -->
+        <!-- UPLOAD -->
+        <!-- ================================================= -->
+
+        <div class="upload-box">
+
+            <p>
+                Upload a retail shelf image to
+                detect and group products.
+            </p>
+
+
+            <input type="file" id="imageInput" accept="image/*">
+
+
+            <br>
+
+
+            <button id="detectButton" onclick="uploadImage()">
+
+                Detect Products
+
+            </button>
+
+
+            <div id="loading">
+
+                Processing image...
+                Please wait.
+
+            </div>
+
+        </div>
+
+
+        <!-- ================================================= -->
+        <!-- RESULT -->
+        <!-- ================================================= -->
+
+        <div id="result">
+
+        </div>
+
+
+    </div>
+
+
+
+    <script>
+
+
+        async function uploadImage() {
+
+
+            const input =
+                document.getElementById(
+                    "imageInput"
+                );
+
+
+            const button =
+                document.getElementById(
+                    "detectButton"
+                );
+
+
+            const loading =
+                document.getElementById(
+                    "loading"
+                );
+
+
+            const result =
+                document.getElementById(
+                    "result"
+                );
+
+
+            // ---------------------------------------------------
+            // CHECK IMAGE
+            // ---------------------------------------------------
+
+            if (!input.files.length) {
+
+                alert(
+                    "Please select an image first."
+                );
+
+                return;
+            }
+
+
+            // ---------------------------------------------------
+            // PREPARE REQUEST
+            // ---------------------------------------------------
+
+            const formData =
+                new FormData();
+
+
+            formData.append(
+                "image",
+                input.files[0]
+            );
+
+
+            // ---------------------------------------------------
+            // UI STATE
+            // ---------------------------------------------------
+
+            button.disabled = true;
+
+            button.innerText =
+                "Processing...";
+
+            loading.style.display =
+                "block";
+
+            result.innerHTML = "";
+
+
+            try {
+
+
+                // ------------------------------------------------
+                // SEND IMAGE TO FLASK
+                // ------------------------------------------------
+
+                const response =
+                    await fetch(
+                        "/detect",
+                        {
+                            method: "POST",
+                            body: formData
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                // ------------------------------------------------
+                // HANDLE BACKEND ERROR
+                // ------------------------------------------------
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        data.error ||
+                        "Detection failed."
+                    );
+                }
+
+
+                // ------------------------------------------------
+                // NO OBJECTS
+                // ------------------------------------------------
+
+                if (
+                    data.total_objects === 0
+                ) {
+
+                    result.innerHTML = `
+
+                <div class="error">
+
+                    No products were detected
+                    in the uploaded image.
+
+                </div>
+
+            `;
+
+                    return;
+                }
+
+
+                // ------------------------------------------------
+                // DISPLAY RESULT
+                // ------------------------------------------------
+
+                result.innerHTML = `
+
+            <div class="result-box">
+
+                <h2 class="result-title">
+
+                    Detection Result
+
+                </h2>
+
+
+                <div class="success">
+
+                    Detection completed successfully.
+
+                </div>
+
+
+                <!-- ================================ -->
+                <!-- STATISTICS -->
+                <!-- ================================ -->
+
+                <div class="stats">
+
+
+                    <div class="stat-card">
+
+                        <div class="stat-number">
+
+                            ${data.total_objects}
+
+                        </div>
+
+                        <div class="stat-label">
+
+                            Detected Objects
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="stat-card">
+
+                        <div class="stat-number">
+
+                            ${data.total_groups}
+
+                        </div>
+
+                        <div class="stat-label">
+
+                            Product Groups
+
+                        </div>
+
+                    </div>
+
+
+                </div>
+
+
+                <!-- ================================ -->
+                <!-- ANNOTATED IMAGE -->
+                <!-- ================================ -->
+
+                ${data.annotated_image
+                        ?
+                        `
+
+                    <h3>
+
+                        Annotated Detection
+
+                    </h3>
+
+
+                    <img
+                        src="${data.annotated_image}"
+                        class="annotated-image"
+                        alt="Detection Result"
+                    >
+
+                    `
+                        :
+                        ""
+                    }
+
+
+                <!-- ================================ -->
+                <!-- JSON -->
+                <!-- ================================ -->
+
+                <h3 class="json-title">
+
+                    API Response
+
+                </h3>
+
+
+                <pre>${escapeHtml(
+                        JSON.stringify(
+                            data,
+                            null,
+                            2
+                        )
+                    )}</pre>
+
+
+            </div>
+
+        `;
+
+
+            }
+
+            catch (error) {
+
+
+                result.innerHTML = `
+
+            <div class="error">
+
+                Error:
+
+                ${escapeHtml(
+                    error.message
+                )}
+
+            </div>
+
+        `;
+
+            }
+
+
+            finally {
+
+
+                button.disabled = false;
+
+                button.innerText =
+                    "Detect Products";
+
+                loading.style.display =
+                    "none";
+
+            }
+
+        }
+
+
+
+        // ======================================================
+        // ESCAPE HTML
+        // Prevent JSON/text from being interpreted as HTML
+        // ======================================================
+
+        function escapeHtml(text) {
+
+            const div =
+                document.createElement(
+                    "div"
+                );
+
+            div.textContent =
+                text;
+
+            return div.innerHTML;
+        }
+
+
+    </script>
+
+
+</body>
+
+</html>

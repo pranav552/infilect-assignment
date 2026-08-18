@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Runtime uploads
+uploads/*
+!uploads/.gitkeep
+
+# Generated outputs
+runs/
+outputs/
+
+# Infilect-provided assignment data
+data/sample_images/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints/

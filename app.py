@@ -696,7 +696,7 @@ def detect():
     draw = ImageDraw.Draw(
         annotated_image
     )
-    GROUP_COLORS = ["red", "lime", "blue", "yellow", "magenta", "cyan", "orange", "purple", "brown", "teal"]
+
     try:
         font = ImageFont.truetype(
             "arial.ttf",
@@ -714,11 +714,10 @@ def detect():
         y2 = obj["y2"]
 
         group_id = obj["group_id"]
-        box_color = GROUP_COLORS[group_id % len(GROUP_COLORS)]
 
         draw.rectangle(
             [x1, y1, x2, y2],
-            outline=box_color,
+            outline="red",
             width=4
         )
 
@@ -746,7 +745,7 @@ def detect():
                 x1 + text_width + 10,
                 y1
             ],
-            fill=box_color
+            fill="red"
         )
 
         draw.text(

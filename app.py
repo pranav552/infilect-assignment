@@ -714,11 +714,11 @@ def detect():
         y2 = obj["y2"]
 
         group_id = obj["group_id"]
-                box_color = GROUP_COLORS[group_id % len(GROUP_COLORS)]
+        box_color = GROUP_COLORS[group_id % len(GROUP_COLORS)]
 
         draw.rectangle(
             [x1, y1, x2, y2],
-                        outline=box_color,
+            outline=box_color,
             width=4
         )
 

@@ -4,6 +4,7 @@ from ultralytics import YOLO
 import os
 import re
 import uuid
+from difflib import SequenceMatcher
 import numpy as np
 import torch
 import torch.nn as nn
@@ -178,6 +179,147 @@ def clean_ocr_text(text):
         useful[:3]
     ).upper()
 
+# ============================================================
+# BRAND EXTRACTION
+# ============================================================
+
+def extract_brand_identifier(ocr_text):
+    """
+    Extract a lightweight brand identifier from cleaned OCR text.
+
+    The method is intentionally generic:
+    - No fixed list of brands is used.
+    - OCR text is split into meaningful tokens.
+    - Very short/common product-description words are ignored.
+    - The first strong token is treated as the brand identifier.
+
+    Example:
+
+        "BOURNVITA CHOCOLATE" -> "BOURNVITA"
+        "BOURNVITA 500G"      -> "BOURNVITA"
+        "COMPLAN PISTA"       -> "COMPLAN"
+        "CADBURY DAIRY MILK"  -> "CADBURY"
+    """
+
+    if not ocr_text:
+        return ""
+
+    text = str(ocr_text).upper().strip()
+
+    # Extract alphabetic tokens
+    tokens = re.findall(
+        r"[A-Z]+",
+        text
+    )
+
+    # Generic words that are more likely to describe
+    # the product rather than identify its brand.
+    ignored_words = {
+        "THE",
+        "AND",
+        "FOR",
+        "WITH",
+        "FROM",
+        "NEW",
+        "PACK",
+        "POWDER",
+        "MILK",
+        "FOOD",
+        "DRINK",
+        "CHOCOLATE",
+        "VANILLA",
+        "STRAWBERRY",
+        "ORIGINAL",
+        "PREMIUM",
+        "INSTANT",
+        "FLAVOUR",
+        "FLAVOR",
+        "PLUS",
+        "LITE",
+        "ZERO",
+        "FREE",
+        "MAX",
+        "GOLD",
+        "CLASSIC",
+        "CREAM",
+        "BISCUIT",
+        "BISCUITS",
+        "SOAP",
+        "SHAMPOO",
+        "CONDITIONER",
+        "DETERGENT",
+        "LIQUID",
+        "BAR",
+        "BARS",
+        "SIZE",
+        "VALUE"
+    }
+
+    meaningful_tokens = []
+
+    for token in tokens:
+
+        token = token.strip()
+
+        if len(token) < 3:
+            continue
+
+        if token in ignored_words:
+            continue
+
+        meaningful_tokens.append(token)
+
+    if not meaningful_tokens:
+        return ""
+
+    # The first strong token is used as the brand identifier.
+    return meaningful_tokens[0]
+
+
+def brands_are_similar(
+    brand_a,
+    brand_b,
+    threshold=0.88
+):
+    """
+    Compare two OCR-derived brand identifiers.
+
+    Exact matches are always accepted.
+
+    Fuzzy matching handles small OCR errors such as:
+
+        BOURNVITA
+        BOURNVTA
+
+    The relatively high threshold prevents unrelated brands
+    from being merged too easily.
+    """
+
+    if not brand_a or not brand_b:
+        return False
+
+    brand_a = brand_a.upper().strip()
+    brand_b = brand_b.upper().strip()
+
+    # Exact brand match
+    if brand_a == brand_b:
+        return True
+
+    # Avoid comparing extremely different-length tokens.
+    length_difference = abs(
+        len(brand_a) - len(brand_b)
+    )
+
+    if length_difference > 2:
+        return False
+
+    similarity = SequenceMatcher(
+        None,
+        brand_a,
+        brand_b
+    ).ratio()
+
+    return similarity >= threshold
 
 # ============================================================
 # UNION-FIND
@@ -523,57 +665,88 @@ def detect():
     uf = UnionFind(n)
 
 
-    # --------------------------------------------------------
-    # RULE 1
-    #
-    # Same OCR text = same group
-    # --------------------------------------------------------
+    # ========================================================
+    # EXTRACT BRAND IDENTIFIER
+    # ========================================================
 
-    text_groups = {}
+    for obj in object_data:
 
-
-    for i, obj in enumerate(
-        object_data
-    ):
-
-        text = obj["ocr_text"]
-
-        if not text:
-            continue
-
-        if text not in text_groups:
-
-            text_groups[text] = []
-
-        text_groups[text].append(
-            i
+        obj["brand_identifier"] = (
+            extract_brand_identifier(
+                obj["ocr_text"]
+            )
         )
 
 
-    for text, indices in (
-        text_groups.items()
-    ):
+    # ========================================================
+    # RULE 1
+    #
+    # BRAND-LEVEL GROUPING
+    # ========================================================
+    #
+    # Products are grouped using their extracted brand
+    # identifier instead of their complete OCR text.
+    #
+    # Example:
+    #
+    #   BOURNVITA CHOCOLATE
+    #   BOURNVITA 500G
+    #   BOURNVITA HEALTH DRINK
+    #
+    # all produce:
+    #
+    #   BOURNVITA
+    #
+    # and therefore belong to the same brand group.
+    # ========================================================
 
-        if len(indices) < 2:
+    for i in range(n):
+
+        brand_i = object_data[i][
+            "brand_identifier"
+        ]
+
+        # No usable OCR for this object
+        if not brand_i:
             continue
 
-        first = indices[0]
+        for j in range(
+            i + 1,
+            n
+        ):
 
-        for idx in indices[1:]:
+            brand_j = object_data[j][
+                "brand_identifier"
+            ]
 
-            uf.union(
-                first,
-                idx
-            )
+            # No usable OCR for second object
+            if not brand_j:
+                continue
+
+            # Same / similar brand
+            if brands_are_similar(
+                brand_i,
+                brand_j
+            ):
+
+                uf.union(
+                    i,
+                    j
+                )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # RULE 2
     #
-    # Visual similarity only when
-    # OCR is unavailable for at least
-    # one object.
-    # --------------------------------------------------------
+    # VISUAL SIMILARITY FALLBACK
+    # ========================================================
+    #
+    # ResNet50 is used ONLY when BOTH objects have no usable
+    # OCR-derived brand identifier.
+    #
+    # If either object has a known brand, visual similarity
+    # cannot override the brand information.
+    # ========================================================
 
     embeddings = np.array(
         embeddings
@@ -587,8 +760,8 @@ def detect():
 
     for i in range(n):
 
-        text_i = object_data[i][
-            "ocr_text"
+        brand_i = object_data[i][
+            "brand_identifier"
         ]
 
         for j in range(
@@ -596,9 +769,17 @@ def detect():
             n
         ):
 
-            text_j = object_data[j][
-                "ocr_text"
+            brand_j = object_data[j][
+                "brand_identifier"
             ]
+
+            # ------------------------------------------------
+            # If either object has usable OCR/brand information,
+            # DO NOT use visual similarity to merge them.
+            # ------------------------------------------------
+
+            if brand_i or brand_j:
+                continue
 
             similarity = (
                 similarity_matrix[
@@ -606,19 +787,6 @@ def detect():
                     j
                 ]
             )
-
-
-            # If both objects have
-            # different OCR text,
-            # don't merge visually.
-            if (
-                text_i
-                and text_j
-                and text_i != text_j
-            ):
-
-                continue
-
 
             # Visual fallback
             if similarity >= VISUAL_THRESHOLD:
@@ -653,8 +821,6 @@ def detect():
         object_data[i][
             "group_id"
         ] = root_to_group[root]
-
-
     # ========================================================
     # REMOVE OCR FROM FINAL REQUIRED
     # RESPONSE
@@ -784,33 +950,13 @@ def detect():
             for obj in final_objects
         )
     )
-# ======================================================== 
-# FINAL JSON
-# ========================================================
-
-    total_groups = len(
-        set(
-            obj["group_id"]
-            for obj in final_objects
-        )
-    )
-
 
     response = {
-
-    "total_objects":
-        len(final_objects),
-
-    "total_groups":
-        total_groups,
-
-    "annotated_image":
-        f"/uploads/{annotated_filename}",
-
-    "objects":
-        final_objects
-
-}
+        "total_objects": len(final_objects),
+        "total_groups": total_groups,
+        "annotated_image": f"/uploads/{annotated_filename}",
+        "objects": final_objects
+    }
 
     print(
         "Groups:",
@@ -821,7 +967,6 @@ def detect():
         response
     )
 
-
 # ============================================================
 # START
 # ============================================================
@@ -831,5 +976,5 @@ if __name__ == "__main__":
     app.run(
         host="127.0.0.1",
         port=5000,
-        debug=True
+        debug=False
     )
